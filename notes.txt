@@ -1,9 +1,9 @@
->>>>>>>>>>>>>>>>>>>>>>MISC
+>>>>>>>>>>>>>>>>>>>>>>   MISC   >>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>
 Scrapy shell command for expath testing:
 scrapy shell "opportunites_list_example.html"
 
 
->>>>>>>>>>>>>>>>>>>>>>>HTML STUFF FROM DARPA PAGE>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>
+>>>>>>>>>>>>>>>>>>>>>>>   HTML STUFF FROM DARPA PAGE   >>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>
 
 <input type="text" id="autocomplete_input_dnf_class_values_procurement_notice__agency_" size="30" minlength="0" maxlength="255" no_submit="" name="autocomplete_input_dnf_class_values[procurement_notice][agency]" tabindex="0" style="width: 300px; background-image: url(https://www.fbo.gov/yui/build/assets/icon_find_14.gif);" value="" class="input-text yui-ac-input" autocomplete="off">
 
@@ -14,7 +14,7 @@ DCA:
 <input type="hidden" id="dnf_class_values_procurement_notice__agency_" name="dnf_class_values[procurement_notice][agency]" value="8e1ff864fde18b1eff005e41be152153">
 
 
->>>>>>>>>>>>>>>>>>>>>>>>REQUEST FORM DATA & HEADERS>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>
+>>>>>>>>>>>>>>>>>>>>>>>>    REQUEST FORM DATA & HEADERS   >>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>
 
 *************Request for Darpa***********************
 Cookie Header

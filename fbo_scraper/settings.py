@@ -1,4 +1,5 @@
 # -*- coding: utf-8 -*-
+from scrapy.settings.default_settings import DOWNLOAD_DELAY
 
 # Scrapy settings for fbo_scraper project
 #
@@ -13,5 +14,9 @@ BOT_NAME = 'fbo_scraper'
 SPIDER_MODULES = ['fbo_scraper.spiders']
 NEWSPIDER_MODULE = 'fbo_scraper.spiders'
 
+ROBOTSTXT_OBEY = True
+DOWNLOAD_DELAY = 1.0
+
 # Crawl responsibly by identifying yourself (and your website) on the user-agent
-#USER_AGENT = 'fbo_scraper (+http://www.yourdomain.com)'
+# !!! ATTENTION: PLEASE REPLACE WITH YOUR OWN WEBSITE IF YOU ARE GOING TO USE USER_AGENT!
+#USER_AGENT = 'fbo_scraper (+http://research.umd.edu/)'
