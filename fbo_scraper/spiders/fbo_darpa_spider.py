@@ -11,6 +11,7 @@ import scrapy
 import scrapy.http
 import urllib
 import re
+import time
 from scrapy.selector import Selector
 
 from fbo_scraper.items import Opportunity
@@ -33,7 +34,7 @@ class FboDarpaSpider(scrapy.Spider):
 	
 	# Constructor
 	# synopsis_type may be: first_filled, complete
-	def __init__(self, synopsis_type = "first_filled", *args, **kwargs):
+	def __init__(self, synopsis_type="first_filled", *args, **kwargs):
 		self.data_params_determined = False
 		self.synopsis_type = "first_filled" 
 		super(FboDarpaSpider, self).__init__(*args, **kwargs)
@@ -91,7 +92,7 @@ class FboDarpaSpider(scrapy.Spider):
 		yield [self.construct_list_query_request(url, self.parse_opportunities_list)]
 		
 	def parse_initial_opportunities_list(self, response):
-		pattern = re.compile("\d\s[-]\s\d\d?\d?\s(?:of)\s(\d+)")
+		pattern = re.compile(r"\d\s[-]\s\d\d?\d?\s(?:of)\s(\d+)")
 		x_of_y_pages = str(response.xpath("//span[@class='lst-cnt']/text()")[0].extract())
 		self.num_opportunities_found = num_ops = int(pattern.match(x_of_y_pages).group(1))
 		ops_per_page = FboDarpaSpider.opportunities_per_page;
@@ -123,11 +124,29 @@ class FboDarpaSpider(scrapy.Spider):
 		notice_urls = response.xpath("//a[@class='lst-lnk-notice']/@href").extract()
 		# prepend with index url, and ensure we're using "Complete View" to get all synopsis details if necessary
 		notice_urls = [FboDarpaSpider.index_url + str(url).replace("&_cview=0", "&_cview=1") for url in notice_urls]
-		requests = [self.construct_notice_request(url, self.parse_opportunity) for url in notice_urls]
+		requests = [self.construct_notice_request(url, self.parse_opportunity_notice) for url in notice_urls]
 		yield requests
 	
-	def parse_opportunity(self,response):
+	def parse_opportunity_notice(self, response):
+		# deadline_date =
+		date_xpath = "//div[@id='dnf_class_values_procurement_notice__response_deadline__widget']/text()"
+		full_date_string = response.xpath(date_xpath)[0].extract()
+		date_pattern = r"(?:Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)\s\d\d?,\s\d\d\d?\d"
+		proper_date_string_matches = response.xpath(date_xpath)[0].re(date_pattern)
+		if(len(full_date_string) < 5):
+			#not a real date assume contionous submision date, in which case skip this notice 
+			return
+		
+		if(len(proper_date_string_matches) != 1 ):
+			raise RuntimeError("fbo_scraper: encountered unknown Deadline Date format. Got: " + repr(full_date_string))
+		
+		deadline_date = time.strptime(proper_date_string_matches[0], "%b %d, %Y")
+		
+		#Use this to get formatted Month#/Day#/Year string
+		#time.strftime("%m/%d/%Y",deadline_date)
+		
 		opp = Opportunity()
+		opp["deadline_date"] = time.strftime("%m/%d/%Y",deadline_date)
 		opp["opportunity_title"] = response.xpath("//div[@class='agency-header']/h2/text()")[0].extract()
 		opp["sponsor_number"] = str(response.xpath("//div[@id='dnf_class_values_procurement_notice__solicitation_number__widget']/text()")[0].extract()).strip()
 		opp["announcement_type"] = str(response.xpath("//div[@id='dnf_class_values_procurement_notice__procurement_type__widget']/text()")[0].extract().strip())
@@ -137,7 +156,7 @@ class FboDarpaSpider(scrapy.Spider):
 		opp["synopsis"] = u""
 		full_desc = response.xpath("//div[@id='dnf_class_values_procurement_notice__description__widget']")[0].extract()
 		desc_text = Selector(text=full_desc).xpath("./body/div/text()").extract()
-		#trim whitespace and skip first entry - it's going to be blank
+		# trim whitespace and skip first entry - it's going to be blank
 		desc_text = [entry.strip() for entry in desc_text[1:]]
 		
 		if(len(desc_text) > 0):
@@ -146,7 +165,7 @@ class FboDarpaSpider(scrapy.Spider):
 			if(self.synopsis_type == "first_filled"):
 				ix_entry = 0
 				found_filled = False
-				#find the first filled synopsis entry
+				# find the first filled synopsis entry
 				while found_filled != True and ix_entry < len(desc_text): 
 					if(len(desc_text[ix_entry]) != 0):
 						found_filled = True
