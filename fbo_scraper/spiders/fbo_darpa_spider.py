@@ -40,10 +40,7 @@ class FboDarpaSpider(scrapy.Spider):
 		super(FboDarpaSpider, self).__init__(*args, **kwargs)
 	
 	
-	start_urls = [
-        index_url + "?s=opportunity&mode=list&tab=list&tabmode=list&pp=" 
-        + str(opportunities_per_page)
-    ]
+	start_url = index_url + "?s=opportunity&mode=list&tab=list&tabmode=list&pp=" + str(opportunities_per_page)
 	
 	def construct_list_query_request(self, url, callback):
 		payload = {
@@ -88,8 +85,8 @@ class FboDarpaSpider(scrapy.Spider):
 		
 	# @override
 	# called to construct requests from start url(s)
-	def make_requests_from_url(self, url):
-		yield [self.construct_list_query_request(url, self.parse_opportunities_list)]
+	def start_requests(self):
+		yield self.construct_list_query_request(FboDarpaSpider.start_url, self.parse_initial_opportunities_list)
 		
 	def parse_initial_opportunities_list(self, response):
 		pattern = re.compile(r"\d\s[-]\s\d\d?\d?\s(?:of)\s(\d+)")
@@ -99,11 +96,12 @@ class FboDarpaSpider(scrapy.Spider):
 		# Number of result list pages to traverse after the initial query
 		self.list_page_number = num_pages = num_ops / ops_per_page + int(num_ops % ops_per_page > 0)
 		# tweak the base url to generate urls for each page of result listing
-		base_url = FboDarpaSpider.start_urls[0]
+		base_url = FboDarpaSpider.start_url
 		list_page_urls = [base_url + "&pageID=" + str(page_id) for page_id in range(1, num_pages + 1)]
 		# generate new request list
 		requests = [self.construct_list_query_request(url, self.parse_opportunities_list_page) for url in list_page_urls]
-		yield requests
+		for request in requests:
+			yield request
 		
 	def construct_notice_request(self, url, callback):
 		headers = {
@@ -125,7 +123,8 @@ class FboDarpaSpider(scrapy.Spider):
 		# prepend with index url, and ensure we're using "Complete View" to get all synopsis details if necessary
 		notice_urls = [FboDarpaSpider.index_url + str(url).replace("&_cview=0", "&_cview=1") for url in notice_urls]
 		requests = [self.construct_notice_request(url, self.parse_opportunity_notice) for url in notice_urls]
-		yield requests
+		for request in requests:
+			yield request
 	
 	def parse_opportunity_notice(self, response):
 		# deadline_date =
@@ -178,4 +177,6 @@ class FboDarpaSpider(scrapy.Spider):
 					aggregate_desc += (newline + desc_text[ix_entry])
 				opp["synopsis"] = aggregate_desc
 		
-		
+		#leave office blank for now
+		opp["office"] = ""
+		yield opp
