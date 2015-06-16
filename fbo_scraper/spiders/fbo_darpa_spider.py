@@ -14,6 +14,7 @@ import re
 import time
 import random
 from scrapy.selector import Selector
+import htmlentitydefs
 
 from fbo_scraper.items import Opportunity
 
@@ -34,9 +35,8 @@ class FboDarpaSpider(scrapy.Spider):
 	
 	# Constructor
 	# synopsis_type may be: first_filled, complete
-	def __init__(self, synopsis_type="first_filled", *args, **kwargs):
+	def __init__(self, *args, **kwargs):
 		self.data_params_determined = False
-		self.synopsis_type = synopsis_type
 		random.seed()
 		super(FboDarpaSpider, self).__init__(*args, **kwargs)
 	
@@ -143,7 +143,7 @@ class FboDarpaSpider(scrapy.Spider):
 		date_xpath = "//div[@id='dnf_class_values_procurement_notice__response_deadline__widget']/text()"
 		full_date_string = response.xpath(date_xpath)[0].extract()
 		
-		date_pattern = r"(?:Jan|January|Feb|February|Mar|March|Apr|April|May|Jun|June|Jul|July|Aug|August|Sep|September|Oct|October|Nov|November|Dec|December)\s\d\d?,\s\d\d\d?\d"
+		date_pattern = r"(?:Jan|January|Feb|February|Mar|March|Apr|April|May|Jun|June|Jul|July|Aug|August|Sep|September|Oct|October|Nov|November|Dec|December)\s\d\d?,\s\d\d\d\d"
 		proper_date_string_matches = response.xpath(date_xpath)[0].re(date_pattern)
 		if(full_date_string.strip() == u"-"):
 			#not a real date, assume contionous submision date, in which case skip this notice 
@@ -187,39 +187,36 @@ class FboDarpaSpider(scrapy.Spider):
 		opp["synopsis"] = u""
 		full_desc = response.xpath("//div[@id='dnf_class_values_procurement_notice__description__widget']")[0].extract()
 		
-		if(len(Selector(text=full_desc).xpath("./body/div/p/span/span").extract()) > 0):
-			#some <p> tags have formatting, or perhaps
-			#some idiot hand-pasted an entry from another website / text document and did not remove the formatting
-			#assume single entry (??)
-			desc_text = [u''.join(Selector(text=full_desc).xpath("./body/div/p/span/text()|./body/div/p/span/span/text()").extract())]
+		#some <p> tags have formatting, or perhaps
+		#some idiot hand-pasted an entry from another website / text document and did not remove the formatting
+		#hence the complicated query
+		desc_text_query = ("./body/div/text()|./body/div/p/text()|" #regular text & paragraphs
+						+"./body/div/p/span/text()|./body/div/p/span/span/text()|" #some queer line spacing & kerning 
+						+"/body/div/p/strong/text()|" #some bold text / headers
+						+"./body/div/div/span[@class='added']/text()") #the dates entries were added
+		sel = Selector(text=full_desc).xpath(desc_text_query).extract()
+		
+		newline = u'\n'
+		if(len(sel) > 100): #crazy formatting! Collapse (don't insert newlines except for dates)
+			entr_date_pattern = re.compile(r'(?:Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)\s\d\d?,\s\d\d\d\d\s\d\d?:\d\d?\d\s(?:pm|am)')
+			sel = [entry.strip() + newline if entr_date_pattern.match(entry) or entry == u'Added:' else entry for entry in sel]
 		else:
-			#standard case
-			desc_text = Selector(text=full_desc).xpath("./body/div/text()").extract()
-			# trim whitespace and skip first entry - it's going to be blank
-			desc_text = [entry.strip() for entry in desc_text[1:]]
+			#insert newlines for all entries
+			#trim whitespace
+			sel = [entry.strip() + newline for entry in sel]
+			#get rid of newline for last entry
+			sel[len(sel)-1] = sel[len(sel)-1].strip()
+				
+		desc_text = u''.join(sel)
+		#convert html special characters to unicode
+		try:
+			desc_text = re.sub(r'&([^;]+);', lambda m: unichr(htmlentitydefs.name2codepoint[m.group(1)]), desc_text)
+		except(KeyError):
+			pass #ignore step
 		
+		desc_text = desc_text.strip()#remove trailing newlines
 		
-		if(len(desc_text) > 0):
-			dates_added = Selector(text=full_desc).xpath("//span[@class='added']/text()").extract()[1::2]
-			
-			if(self.synopsis_type == "first_filled"):
-				ix_entry = 0
-				found_filled = False
-				# find the first filled synopsis entry
-				while found_filled != True and ix_entry < len(desc_text): 
-					if(len(desc_text[ix_entry]) != 0):
-						found_filled = True
-						opp["synopsis"] = desc_text[ix_entry]
-			elif(self.synopsis_type == "complete"):
-				aggregate_desc = desc_text[0]
-				newline = u"\n"
-				for ix_entry in range(len(desc_text)):
-					aggregate_desc += (newline + dates_added[ix_entry])
-					aggregate_desc += (newline + desc_text[ix_entry])
-				opp["synopsis"] = aggregate_desc
-			else:
-				raise RuntimeError("fbo_scraper: unrecognized synopsis type: \"" 
-								+ self.synopsis_type + "\". Expecting \"complete\" or \"first_filled\"")
+		opp["synopsis"] = desc_text
 		
 		#leave office blank for now
 		opp["office"] = ""
