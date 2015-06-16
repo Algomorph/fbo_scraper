@@ -35,8 +35,12 @@ class FboDarpaSpider(scrapy.Spider):
 	
 	# Constructor
 	# synopsis_type may be: first_filled, complete
-	def __init__(self, *args, **kwargs):
+	def __init__(self, dont_skip_continous = "false", *args, **kwargs):
 		self.data_params_determined = False
+		if(dont_skip_continous == "true"):
+			self.dont_skip_continous = True
+		else:
+			self.dont_skip_continous = False
 		random.seed()
 		super(FboDarpaSpider, self).__init__(*args, **kwargs)
 	
@@ -146,8 +150,9 @@ class FboDarpaSpider(scrapy.Spider):
 		date_pattern = r"(?:Jan|January|Feb|February|Mar|March|Apr|April|May|Jun|June|Jul|July|Aug|August|Sep|September|Oct|October|Nov|November|Dec|December)\s\d\d?,\s\d\d\d\d"
 		proper_date_string_matches = response.xpath(date_xpath)[0].re(date_pattern)
 		if(full_date_string.strip() == u"-"):
-			#not a real date, assume contionous submision date, in which case skip this notice 
-			return
+			if(not self.dont_skip_continous):
+				#not a real date, assume contionous submision date, in which case skip this notice 
+				return
 		
 		if(len(proper_date_string_matches) != 1 ):
 			print "===> Bad deadline detected, \"" + repr(full_date_string) + "\". Attempting to use the Original Response Date field instead."
@@ -196,7 +201,7 @@ class FboDarpaSpider(scrapy.Spider):
 						+"./body/div/div/span[@class='added']/text()") #the dates entries were added
 		sel = Selector(text=full_desc).xpath(desc_text_query).extract()
 		
-		newline = u'\n'
+		newline = u'\r\n'
 		if(len(sel) > 100): #crazy formatting! Collapse (don't insert newlines except for dates)
 			entr_date_pattern = re.compile(r'(?:Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)\s\d\d?,\s\d\d\d\d\s\d\d?:\d\d?\d\s(?:pm|am)')
 			sel = [entry.strip() + newline if entr_date_pattern.match(entry) or entry == u'Added:' else entry for entry in sel]
