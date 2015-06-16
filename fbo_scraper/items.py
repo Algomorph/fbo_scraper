@@ -18,4 +18,4 @@ class Opportunity(scrapy.Item):
     office = scrapy.Field()
     deadline_date = scrapy.Field()
     hand_check_date = scrapy.Field()
-    hand_check_office = scrapy.Field()
+    #hand_check_office = scrapy.Field()
