@@ -15,7 +15,7 @@ SPIDER_MODULES = ['fbo_scraper.spiders']
 NEWSPIDER_MODULE = 'fbo_scraper.spiders'
 
 ROBOTSTXT_OBEY = True
-#DOWNLOAD_DELAY = 1.0
+DOWNLOAD_DELAY = 2.5
 
 # Crawl responsibly by identifying yourself (and your website) on the user-agent
 # !!! ATTENTION: PLEASE REPLACE WITH YOUR OWN WEBSITE IF YOU ARE GOING TO USE USER_AGENT!

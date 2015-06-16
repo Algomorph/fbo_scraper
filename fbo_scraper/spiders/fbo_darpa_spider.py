@@ -61,10 +61,10 @@ class FboDarpaSpider(scrapy.Spider):
 			"dnf_opt_template":"T9w/cGwAWbswybmDX7oTdTXxVYcDLoQW1MDkvvEnorFrm5k54q2OU09aaqzsSe6m",
 			"dnf_opt_template_dir":"Yx BvwAhyFyVugII8bRnJLG6WrxuiBuGRpBBjyvqt1KAkN/anUTlMWIUZ8ga9kY",
 			"dnf_opt_subform_template":"NxAoWjH6Mp1qhhsA i7/zGF719zd85B9",
-			"dnf_opt_finalize":0,
+			"dnf_opt_finalize":"0",
 			"dnf_opt_mode":"update",
 			"dnf_opt_target":"",
-			"dnf_opt_validate":1,
+			"dnf_opt_validate":"1",
 			"mode":"list"
 		}
 		headers = {
@@ -79,8 +79,8 @@ class FboDarpaSpider(scrapy.Spider):
 			"Referer":"https://www.fbo.gov/",
 			"User-Agent":"Mozilla/5.0 (Windows NT 6.3; WOW64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/43.0.2357.81 Safari/537.36"
 		}
-		return scrapy.http.Request(url, callback=callback,
-								method="POST", body=urllib.urlencode(payload),
+		return scrapy.http.FormRequest(url, callback=callback,
+								method="POST", formdata=payload,
 								headers=headers)
 		
 	# @override
@@ -89,6 +89,7 @@ class FboDarpaSpider(scrapy.Spider):
 		yield self.construct_list_query_request(FboDarpaSpider.start_url, self.parse_initial_opportunities_list)
 		
 	def parse_initial_opportunities_list(self, response):
+		print "\n\n=========== Parsing Initial Notice Listing Page ==============\n"
 		pattern = re.compile(r"\d\s[-]\s\d\d?\d?\s(?:of)\s(\d+)")
 		x_of_y_pages = str(response.xpath("//span[@class='lst-cnt']/text()")[0].extract())
 		self.num_opportunities_found = num_ops = int(pattern.match(x_of_y_pages).group(1))
@@ -100,8 +101,9 @@ class FboDarpaSpider(scrapy.Spider):
 		list_page_urls = [base_url + "&pageID=" + str(page_id) for page_id in range(1, num_pages + 1)]
 		# generate new request list
 		requests = [self.construct_list_query_request(url, self.parse_opportunities_list_page) for url in list_page_urls]
-		for request in requests:
-			yield request
+		yield requests[0]
+		#for request in requests:
+			#yield request
 		
 	def construct_notice_request(self, url, callback):
 		headers = {
@@ -119,34 +121,58 @@ class FboDarpaSpider(scrapy.Spider):
 								headers=headers)
 		
 	def parse_opportunities_list_page(self, response):
+		print "\n\n=========== Parsing Notice Listing Page =============="
+		print "=========== From URL: " + response.url + "\n"
+		
 		notice_urls = response.xpath("//a[@class='lst-lnk-notice']/@href").extract()
-		# prepend with index url, and ensure we're using "Complete View" to get all synopsis details if necessary
+		# prepend with index, and ensure we're using "Complete View" to get all synopsis details if necessary
 		notice_urls = [FboDarpaSpider.index_url + str(url).replace("&_cview=0", "&_cview=1") for url in notice_urls]
+		#print "Parsed notice URLS:"
+		#print notice_urls
+		#print "\n"
 		requests = [self.construct_notice_request(url, self.parse_opportunity_notice) for url in notice_urls]
 		for request in requests:
 			yield request
 	
 	def parse_opportunity_notice(self, response):
-		# deadline_date =
+		bad_date = None
+		print "\n============== Parsing Single Notice ====================="
+		print "============== From: " + response.url
+		#=================== GET DEADLINE DATE=================================
 		date_xpath = "//div[@id='dnf_class_values_procurement_notice__response_deadline__widget']/text()"
 		full_date_string = response.xpath(date_xpath)[0].extract()
-		date_pattern = r"(?:Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)\s\d\d?,\s\d\d\d?\d"
+		
+		date_pattern = r"(?:Jan|Feb|Mar|Apr|May|Jun|June|Jul|July|Aug|Sep|Oct|Nov|Dec)\s\d\d?,\s\d\d\d?\d"
 		proper_date_string_matches = response.xpath(date_xpath)[0].re(date_pattern)
-		if(len(full_date_string) < 5):
+		if(full_date_string.strip() == u"-"):
 			#not a real date assume contionous submision date, in which case skip this notice 
 			return
 		
 		if(len(proper_date_string_matches) != 1 ):
-			raise RuntimeError("fbo_scraper: encountered unknown Deadline Date format. Got: " + repr(full_date_string))
+			print "Bad deadline detected, \"" + repr(full_date_string) + "\". Attempting to use the Original Response Date field instead."
+			bad_date = True
+		if(bad_date):
+			# deadline_date =
+			date_xpath = "//div[@id='dnf_class_values_procurement_notice__original_response_deadline__widget']/text()"
+			full_date_string = response.xpath(date_xpath)[0].extract()
+			proper_date_string_matches = response.xpath(date_xpath)[0].re(date_pattern)
+			if(full_date_string.strip() == u"-"):
+				#not a real date assume contionous submision date, in which case skip this notice 
+				return
+			if(len(proper_date_string_matches) != 1 ):
+				raise RuntimeError("fbo_scraper: encountered unknown Deadline Date format. Got: " + repr(full_date_string))
 		
-		deadline_date = time.strptime(proper_date_string_matches[0], "%b %d, %Y")
+		#the replacing of 4-letter month with 3-letter month for June and July is required,
+		#because time.strptime does not understand 4-letter month representations for "short month"
+		first_match = str(proper_date_string_matches[0].strip()).replace("June","Jun").replace("July","Jul")
+		deadline_date = time.strptime(first_match, "%b %d, %Y")
 		
 		#Use this to get formatted Month#/Day#/Year string
 		#time.strftime("%m/%d/%Y",deadline_date)
 		
 		opp = Opportunity()
 		opp["deadline_date"] = time.strftime("%m/%d/%Y",deadline_date)
-		opp["opportunity_title"] = response.xpath("//div[@class='agency-header']/h2/text()")[0].extract()
+		opp["opportunity_title"] = response.xpath("//div[@class='agency-header-w']/div/h2/text()")[0].extract()
 		opp["sponsor_number"] = str(response.xpath("//div[@id='dnf_class_values_procurement_notice__solicitation_number__widget']/text()")[0].extract()).strip()
 		opp["announcement_type"] = str(response.xpath("//div[@id='dnf_class_values_procurement_notice__procurement_type__widget']/text()")[0].extract().strip())
 		opp["program_url"] = response.url
@@ -179,4 +205,6 @@ class FboDarpaSpider(scrapy.Spider):
 		
 		#leave office blank for now
 		opp["office"] = ""
+		if(bad_date):
+			opp["hand_check_date"] = bad_date
 		yield opp
