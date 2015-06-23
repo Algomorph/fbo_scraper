@@ -19,4 +19,4 @@ class Opportunity(scrapy.Item):
     deadline_date = scrapy.Field(serializer=str)
     check_date = scrapy.Field(serializer=bool)
     check_office = scrapy.Field(serializer=bool)
-    #check_office_wide = scrapy.Field(serializer=bool)
+    check_office_wide = scrapy.Field(serializer=bool)

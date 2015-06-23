@@ -126,7 +126,8 @@ class FboDarpaSpider(scrapy.Spider):
 	def start_requests(self):
 		yield self.start_darpa_scraping()
 	
-	# start scraping the office from the announcements on the darpa.mil hash, and storing them in a local dictionary
+	# start scraping the office from the announcements on the darpa.mil hash, 
+	# and storing them in a local dictionary
 	def start_darpa_scraping(self):
 		return scrapy.http.FormRequest(FboDarpaSpider.darpa_start_url, callback=self.parse_darpa_website_announcement_list, 
 									method="GET")
@@ -162,9 +163,6 @@ class FboDarpaSpider(scrapy.Spider):
 		page_urls = [str(url) for url in response.xpath("//div[@class='pager']/ul/li/a/@href")[:-1].extract()]
 		next_darpa_url = None
 		
-		#print "======Page URLS:====="
-		#print page_urls
-		
 		#determine where to go next
 		for page_url in page_urls:
 			url_leads_to_page = int(page_num_pattern.match(page_url).groups(0)[0])
@@ -172,11 +170,14 @@ class FboDarpaSpider(scrapy.Spider):
 				continue
 			next_darpa_url = FboDarpaSpider.darpa_index_url + page_url
 		if(next_darpa_url):
+			#still have more darpa.mil list pages to go through
 			yield scrapy.http.FormRequest(next_darpa_url, callback=self.parse_darpa_website_announcement_list, 
 									method="GET")
 		else:
-			yield self.start_fbo_scraping() 
+			#done with darpa listing, get stuff from fbo.gov now
+			yield self.start_fbo_scraping()
 	
+	#start scraping the official notices from the fbo.gov website
 	def start_fbo_scraping(self):
 		return self.construct_fbo_list_query_request(FboDarpaSpider.fbo_start_url, self.parse_initial_fbo_opportunities_list)
 	
@@ -247,9 +248,14 @@ class FboDarpaSpider(scrapy.Spider):
 		
 		date_pattern = r"(?:Jan|January|Feb|February|Mar|March|Apr|April|May|Jun|June|Jul|July|Aug|August|Sep|September|Oct|October|Nov|November|Dec|December)\s\d\d?,\s\d\d\d\d"
 		proper_date_string_matches = response.xpath(date_xpath)[0].re(date_pattern)
-		if(not self.dont_skip_continous and full_date_string.strip() == u"-"):
-			#not a real date, assume continuous submission date, in which case skip this notice 
-			return
+		if(full_date_string.strip() == u"-"):
+			if(self.dont_skip_continous):
+				bad_date = True
+			else:
+				#report
+				print "======= SKIPPING AS CONTINOUS-SUBMISSION-DATE ======"
+				#not a real date, assume continuous submission date, in which case skip this notice 
+				return
 		
 		if(len(proper_date_string_matches) != 1 ):
 			print "===> Bad deadline detected, \"" + repr(full_date_string) + "\". Attempting to use the Original Response Date field instead."
@@ -285,11 +291,16 @@ class FboDarpaSpider(scrapy.Spider):
 		office_wide_pattern = re.compile(r"Office\s*\-?\s*Wide",re.IGNORECASE)
 		
 		#check for "Office-Wide" in the title
-		#Office\s*\-?\s*Wide
-		if(not self.dont_skip_office_wide and len(re.findall(office_wide_pattern, opp_title))>0):
-			#skip if it has office-wide in the title
-			return
-
+		if(len(re.findall(office_wide_pattern, opp_title))>0):
+			if(self.dont_skip_office_wide):
+				check_office_wide = True
+			else:
+				#report
+				print "======= SKIPPING AS OFFICE-WIDE ======"
+				#skip if it has office-wide in the title
+				return
+				
+				
 		opp["opportunity_title"] = opp_title
 		
 		#================== THE EASY STUFF (sponsor num, announcement type, url)
@@ -332,6 +343,10 @@ class FboDarpaSpider(scrapy.Spider):
 		
 		desc_text = desc_text.strip()#remove trailing newlines
 		
+		#check for "Office-Wide" in the synopsis
+		if(len(re.findall(office_wide_pattern, desc_text))>0):
+			check_office_wide = True
+		
 		opp["synopsis"] = desc_text
 		
 		#============GET OFFICE & MARK HAND-CHECK FLAGS========================#
@@ -344,4 +359,5 @@ class FboDarpaSpider(scrapy.Spider):
 			opp["check_office"] = True
 		
 		opp["check_date"] = bad_date
+		opp["check_office_wide"] = check_office_wide
 		yield opp
