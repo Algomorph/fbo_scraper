@@ -20,18 +20,26 @@ from fbo_scraper.items import Opportunity
 
 class FboDarpaSpider(scrapy.Spider):
 	name = "fbo_darpa"
+	
 	# this number is specific for DARPA.
 	#  see value attribute of <input id="dnf_class_values_procurement_notice__agency_" ...>
 	#  after you type & choose the name of the desired agency on the fbo.gov front page.
 	agency_id = "048f413b4c64abc6c0afbc36b09f099d"
+	
 	# this name is specific for DARPA. It may be nonessential, I (Algomorph) have not checked.
 	#  see value attribute of <input id="autocomplete_input_dnf_class_values_procurement_notice__agency_" ...>
 	#  after you type & choose the name of the desired agency on the fbo.gov front page. 
 	agency_autocomplete_name = "Other Defense Agencies/Defense Advanced Research Projects Agency"
-	allowed_domains = ["www.fbo.gov"]
+	allowed_domains = ["www.fbo.gov", "www.darpa.mil"]
 	index_url = "https://www.fbo.gov/index"
+	darpa_url = "http://www.darpa.mil/work-with-us/opportunities?ppl=viewall"
+	
 	# number of opportunities per page
 	opportunities_per_page = 100
+	
+	#a dictionary of DARPA announcements, keyed by opportunity_title, 
+	#containing office of each as scraped from the darpa.mil website
+	darpa_announcement_dict = {}
 	
 	# Constructor
 	# synopsis_type may be: first_filled, complete
@@ -91,9 +99,21 @@ class FboDarpaSpider(scrapy.Spider):
 	# @override
 	# called to construct requests from start url(s)
 	def start_requests(self):
-		yield self.construct_list_query_request(FboDarpaSpider.start_url, self.parse_initial_opportunities_list)
 		
-	def parse_initial_opportunities_list(self, response):
+		pass
+	
+	def start_darpa_scraping(self):
+		yield scrapy.http.FormRequest(FboDarpaSpider.darpa_url, callback=self.parse_darpa_website_announcement_list, 
+									method="GET")
+	
+	def parse_darpa_website_announcement_list(self, response):
+		
+		pass
+	
+	def start_fbo_scraping(self):
+		yield self.construct_list_query_request(FboDarpaSpider.start_url, self.parse_initial_fbo_opportunities_list)
+		
+	def parse_initial_fbo_opportunities_list(self, response):
 		print "\n\n=========== Parsing Initial Notice Listing Page ==============\n"
 		pattern = re.compile(r"\d\s[-]\s\d\d?\d?\s(?:of)\s(\d+)")
 		x_of_y_pages = str(response.xpath("//span[@class='lst-cnt']/text()")[0].extract())
@@ -105,7 +125,7 @@ class FboDarpaSpider(scrapy.Spider):
 		base_url = FboDarpaSpider.start_url
 		list_page_urls = [base_url + "&pageID=" + str(page_id) for page_id in range(1, num_pages + 1)]
 		# generate new request list
-		requests = [self.construct_list_query_request(url, self.parse_opportunities_list_page) for url in list_page_urls]
+		requests = [self.construct_list_query_request(url, self.parse_fbo_opportunities_list_page) for url in list_page_urls]
 		#yield requests[0]
 		for request in requests:
 			yield request
@@ -125,7 +145,7 @@ class FboDarpaSpider(scrapy.Spider):
 								method="GET",
 								headers=headers)
 		
-	def parse_opportunities_list_page(self, response):
+	def parse_fbo_opportunities_list_page(self, response):
 		print "\n\n=========== Parsing Notice Listing Page =============="
 		print "=========== From URL: " + response.url + "\n"
 		
@@ -135,11 +155,11 @@ class FboDarpaSpider(scrapy.Spider):
 		#print "Parsed notice URLS:"
 		#print notice_urls
 		#print "\n"
-		requests = [self.construct_notice_request(url, self.parse_opportunity_notice) for url in notice_urls]
+		requests = [self.construct_notice_request(url, self.parse_fbo_opportunity_notice) for url in notice_urls]
 		for request in requests:
 			yield request
 	
-	def parse_opportunity_notice(self, response):
+	def parse_fbo_opportunity_notice(self, response):
 		bad_date = False
 		print "\n============== Parsing Single Notice ====================="
 		print "============== From: " + response.url
