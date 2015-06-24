@@ -1,5 +1,6 @@
 # -*- coding: utf-8 -*-
 #from scrapy.settings.default_settings import DOWNLOAD_DELAY
+#from scrapy.settings.default_settings import ITEM_PIPELINES
 
 # Scrapy settings for fbo_scraper project
 #
@@ -12,6 +13,7 @@
 BOT_NAME = 'fbo_scraper'
 
 SPIDER_MODULES = ['fbo_scraper.spiders']
+ITEM_PIPELINES = {'fbo_scraper.pipelines.FboScraperExcelPipeline':0}
 NEWSPIDER_MODULE = 'fbo_scraper.spiders'
 
 ROBOTSTXT_OBEY = True

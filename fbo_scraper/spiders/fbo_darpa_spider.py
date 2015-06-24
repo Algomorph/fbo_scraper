@@ -15,10 +15,15 @@ from scrapy.selector import Selector
 import htmlentitydefs
 
 from fbo_scraper.items import Opportunity
-
-#A utility for scraping DARPA notices from the fbo.gov website
+from fbo_scraper.db.pdexcel import PandasExcelHelper
 
 class FboDarpaSpider(scrapy.Spider):
+	'''
+	A utility for scraping DARPA notices from the fbo.gov website
+	Run from root directory (top-level fbo_scraper folder) like this:
+		scrapy crawl fbo_darpa
+	'''
+	#spider's name (for scrapy)
 	name = "fbo_darpa"
 	
 	# this number is specific for DARPA.
@@ -40,7 +45,7 @@ class FboDarpaSpider(scrapy.Spider):
 	darpa_index_url = "http://www.darpa.mil"
 	darpa_start_url = darpa_index_url + "/work-with-us/opportunities?ppl=viewall&PP=0"
 	
-	#these are "expected" not to change in the next 50 years
+	# these are "expected" not to change in the next 50 years
 	darpa_office_by_acronym = {
 		"BTO":"Biological Technologies Office",
 		"DSO":"Defense Sciences Office",
@@ -50,37 +55,51 @@ class FboDarpaSpider(scrapy.Spider):
 		"TTO":"Tactical Technology Office"
 	}
 	
-	##
-	# Constructor
-	# @param dont_skip_continous whether or not to skip listings with continuous 
-	#                            submission dates. Set to "true" or "false".
-	# @type dont_skip_continous String
-	def __init__(self, dont_skip_continuous = "false", dont_skip_office_wide = "false", *args, **kwargs):
+	
+	def __init__(self, dont_skip_continuous="false", dont_skip_office_wide="false", *args, **kwargs):
+		'''
+		Constructor
+		@param dont_filter_continous whether or not to skip notices with continuous 
+		                            submission dates. Set to "true" or "false".
+		@type dont_filter_continous String
+		@param dont_filter_office_wide whether or not to skip notices with "Office-Wide"
+									 (or some form thereof) in the title. Set to
+									 "true" or "false".
+		'''
 		self.data_params_determined = False
 		
-		if(dont_skip_continuous in ["true","yes","y","Y"]):
-			self.dont_skip_continous = True
+		if(dont_skip_continuous in ["true", "yes", "y", "Y"]):
+			self.dont_filter_continous = True
 		else:
-			self.dont_skip_continous = False
+			self.dont_filter_continous = False
 			
-		if(dont_skip_office_wide in ["true","yes","y","Y"]):
-			self.dont_skip_office_wide = True
+		if(dont_skip_office_wide in ["true", "yes", "y", "Y"]):
+			self.dont_filter_office_wide = True
 		else:
-			self.dont_skip_office_wide = False
+			self.dont_filter_office_wide = False
 			
-		#a dictionary of DARPA announcements, keyed by opportunity_title, 
-		#containing office of each as scraped from the darpa.mil website
+		# a dictionary of DARPA announcements, keyed by opportunity_title, 
+		# containing office of each as scraped from the darpa.mil website
 		self.darpa_announcement_dict = {}
 			
-		#seed the random generator
+		# seed the random generator
 		random.seed()
 		
-		#some housekeeping
-		self.darpa_page_num_filled = False
+		# preload the existing notices, so that we may avoid scraping them
+		#self.db = PandasExcelHelper()
 		super(FboDarpaSpider, self).__init__(*args, **kwargs)
 	
-	#build a FBO list page query based on the passed-in URL
+	def start_requests(self):
+		'''	
+		@override
+		called to construct requests from start url(s)
+		'''
+		yield self.start_darpa_scraping()
+	
 	def construct_fbo_list_query_request(self, url, callback):
+		'''
+		build a FBO list page query based on the passed-in URL
+		'''
 		payload = {
 			"dnf_class_values[procurement_notice][keywords]":"",
 			"dnf_class_values[procurement_notice][_posted_date]":"",
@@ -120,32 +139,32 @@ class FboDarpaSpider(scrapy.Spider):
 		return scrapy.http.FormRequest(url, callback=callback,
 								method="POST", formdata=payload,
 								headers=headers)
-		
-	# @override
-	# called to construct requests from start url(s)
-	def start_requests(self):
-		yield self.start_darpa_scraping()
-	
-	# start scraping the office from the announcements on the darpa.mil hash, 
-	# and storing them in a local dictionary
+
 	def start_darpa_scraping(self):
-		return scrapy.http.FormRequest(FboDarpaSpider.darpa_start_url, callback=self.parse_darpa_website_announcement_list, 
+		'''
+		start scraping the office from the announcements on the darpa.mil hash, 
+		and storing them in a local dictionary
+		'''
+		return scrapy.http.FormRequest(FboDarpaSpider.darpa_start_url, callback=self.parse_darpa_website_announcement_list,
 									method="GET")
 	
-	# parse the list of announcements from the darpa website to get the office & the next list page
+	
 	def parse_darpa_website_announcement_list(self, response):
+		'''
+		parse the list of announcements from the darpa website to get the office & the next list page
+		'''
 		print "\n\n=========== Parsing darpa.mil Announcement Listing Page ==============\n"
 		print "=========== From URL: " + response.url + "\n"
-		#process the titles and offices
+		# process the titles and offices
 		titles = [str(unicode_title.strip()) for unicode_title 
 				in response.xpath("//h2[@class='listing__link']/a/text()").extract()]
 		office_acronyms = [str(unicode_office.strip()) for unicode_office 
 						in response.xpath("//div[@class='listing__office']/text()").extract()]
 		offices = [FboDarpaSpider.darpa_office_by_acronym[office_acronym] for office_acronym in office_acronyms]
 		
-		#if the total #-s are not the same, something is wrong here.
+		# if the total #-s are not the same, something is wrong here.
 		if(len(offices) != len(titles)):
-			raise RuntimeError("The number of announcement titles (" + str(len(titles)) +
+			raise RuntimeError("The number of announcement titles (" + str(len(titles)) + 
 							") does not correspond to the number of announcement offices ("
 							+ str(len(offices)) + 
 							") on the darpa.mil page!")
@@ -153,39 +172,42 @@ class FboDarpaSpider(scrapy.Spider):
 		for ix_announcement in xrange(len(titles)):
 			self.darpa_announcement_dict[titles[ix_announcement]] = offices[ix_announcement]
 		
-		#pattern for getting page numbers (0-based) from a darpa listing url
+		# pattern for getting page numbers (0-based) from a darpa listing url
 		page_num_pattern = re.compile(r"(?:http:\/\/www\.darpa\.mil)?\/work-with-us\/opportunities\?ppl=viewall&PP=(\d+)")
 		
-		#determine which listing page we are on right now
+		# determine which listing page we are on right now
 		page_num = int(page_num_pattern.match(response.url).groups(0)[0])
 		
-		#get the Page 1, 2, 3, ..., Last urls at the bottom of the page
+		# get the Page 1, 2, 3, ..., Last urls at the bottom of the page
 		page_urls = [str(url) for url in response.xpath("//div[@class='pager']/ul/li/a/@href")[:-1].extract()]
 		next_darpa_url = None
 		
-		#determine where to go next
+		# determine where to go next
 		for page_url in page_urls:
 			url_leads_to_page = int(page_num_pattern.match(page_url).groups(0)[0])
 			if(url_leads_to_page <= page_num):
 				continue
 			next_darpa_url = FboDarpaSpider.darpa_index_url + page_url
 		if(next_darpa_url):
-			#still have more darpa.mil list pages to go through
-			yield scrapy.http.FormRequest(next_darpa_url, callback=self.parse_darpa_website_announcement_list, 
+			# still have more darpa.mil list pages to go through
+			yield scrapy.http.FormRequest(next_darpa_url, callback=self.parse_darpa_website_announcement_list,
 									method="GET")
 		else:
-			#done with darpa listing, get stuff from fbo.gov now
+			# done with darpa listing, get stuff from fbo.gov now
 			yield self.start_fbo_scraping()
 	
-	#start scraping the official notices from the fbo.gov website
+	# start scraping the official notices from the fbo.gov website
 	def start_fbo_scraping(self):
-		return self.construct_fbo_list_query_request(FboDarpaSpider.fbo_start_url, self.parse_initial_fbo_opportunities_list)
+		return self.construct_fbo_list_query_request(FboDarpaSpider.fbo_start_url, self.parse_initial_fbo_solicitation_list)
 	
-	#retrieve some meta information about the initial FBO query results, e.g.
-	#how many pages are there total, and generate queries for each list page 
-	#(i.e. 1, 2, 3, ..., last). Each list page will have at least one and at
-	# most <opportunities_per_page> notices.
-	def parse_initial_fbo_opportunities_list(self, response):
+	
+	def parse_initial_fbo_solicitation_list(self, response):
+		'''
+		retrieve some meta information about the initial FBO query results, e.g.
+		how many pages are there total, and generate queries for each list page 
+		(i.e. 1, 2, 3, ..., last). Each list page will have at least one and at
+		most <opportunities_per_page> notices.
+		'''
 		print "\n\n=========== Parsing Initial Notice Listing Page ==============\n"
 		
 		x_of_y_pages_pattern = re.compile(r"\d\s[-]\s\d\d?\d?\s(?:of)\s(\d+)")
@@ -202,13 +224,19 @@ class FboDarpaSpider(scrapy.Spider):
 		list_page_urls = [base_url + "&pageID=" + str(page_id) for page_id in range(1, num_pages + 1)]
 		
 		# generate new request list
-		requests = [self.construct_fbo_list_query_request(url, self.parse_fbo_opportunities_list_page) for url in list_page_urls]
+		requests = [self.construct_fbo_list_query_request(url, self.parse_fbo_solicitations_list_page) for url in list_page_urls]
 
 		for request in requests:
 			yield request
 	
-	#build and return a single query for a single FBO notice
 	def construct_fbo_notice_request(self, url, callback):
+		'''
+		build and return a single query for a single FBO notice
+		@param url The get url to build around (containing the notice's unique identifier internal to fbo.gov)
+		@type url String
+		@param callback Callback function
+		@type callback Function
+		'''
 		headers = {
 			"Host": "www.fbo.gov",
 			"Connection": "keep-alive",
@@ -223,23 +251,56 @@ class FboDarpaSpider(scrapy.Spider):
 								method="GET",
 								headers=headers)
 	
-	#parse the FBO opportunitues list (go down the list and generate query for each notice link)
-	def parse_fbo_opportunities_list_page(self, response):
+	def parse_fbo_solicitations_list_page(self, response):
+		'''
+		parse the FBO opportunitues list page (go down the list and generate query for each notice link)
+		'''
 		print "\n\n=========== Parsing Notice Listing Page =============="
 		print "=========== From URL: " + response.url + "\n"
 		
 		notice_urls = response.xpath("//a[@class='lst-lnk-notice']/@href").extract()
 		# prepend with index, and ensure we're using "Complete View" to get all synopsis details if necessary
 		notice_urls = [FboDarpaSpider.fbo_index_url + str(url).replace("&_cview=0", "&_cview=1") for url in notice_urls]
+		solns = [str(soln.strip()) for soln in response.xpath("//div[@class='soln']/text()").extract()]
+		
+		#if these lengths don't match, something is wrong here
+		if(len(notice_urls) != len(solns)):
+			raise RuntimeError("Parsed fbo.gov solicitation url number ("
+							+str(len(notice_urls))
+							+") does not match number of parsed solicitation ids/numbers (" 
+							+ str(len(solns)) + ").")
+			
+		#check against the dictionary of solicitations we already have.
+		filtered_notice_urls = []
+		for sol_ix in xrange(len(notice_urls)):
+			if not self.db.contains(solns[sol_ix]):
+				#skip if we alread have this one
+				filtered_notice_urls.append(notice_urls[sol_ix])
+			else:
+				#report
+				print "======= SKIPPING " + solns[sol_ix] + " (already in database) ====== "
 
-		requests = [self.construct_fbo_notice_request(url, self.parse_fbo_opportunity_notice) for url in notice_urls]
+		requests = [self.construct_fbo_notice_request(url, self.parse_fbo_solicitation) 
+				for url in filtered_notice_urls]
 		for request in requests:
 			yield request
-	
-	#parse the FBO notice itself
-	def parse_fbo_opportunity_notice(self, response):
+
+	def parse_fbo_solicitation(self, response):
+		'''
+		parse the FBO notice itself
+		@param response The response object containing the page with the notice.
+		@type Response scrapy.http.Response
+		'''
+		sponsor_number = str(response.xpath("//div[@id='dnf_class_values_procurement_notice__solicitation_number__widget']/text()")[0].extract()).strip()
+		if(self.db.contains(sponsor_number)):
+			# report
+			print "======= SKIPPING (already in database) ======"
+			#alread have this one, skip
+			return
+		
 		bad_date = False
 		check_office_wide = False
+		filtered = False
 		print "\n============== Parsing Single Notice ====================="
 		print "============== From: " + response.url
 		#=================== GET DEADLINE DATE=================================#
@@ -249,38 +310,38 @@ class FboDarpaSpider(scrapy.Spider):
 		date_pattern = r"(?:Jan|January|Feb|February|Mar|March|Apr|April|May|Jun|June|Jul|July|Aug|August|Sep|September|Oct|October|Nov|November|Dec|December)\s\d\d?,\s\d\d\d\d"
 		proper_date_string_matches = response.xpath(date_xpath)[0].re(date_pattern)
 		if(full_date_string.strip() == u"-"):
-			if(self.dont_skip_continous):
-				bad_date = True
-			else:
-				#report
-				print "======= SKIPPING AS CONTINOUS-SUBMISSION-DATE ======"
-				#not a real date, assume continuous submission date, in which case skip this notice 
-				return
+			bad_date = True
+			if(not self.dont_filter_continous):
+				# report
+				print "======= FILTERING AS CONTINOUS-SUBMISSION-DATE ======"
+				# not a real date, assume continuous submission date, in which case filter this notice 
+				filtered = True
 		
-		if(len(proper_date_string_matches) != 1 ):
+		if(len(proper_date_string_matches) != 1):
 			print "===> Bad deadline detected, \"" + repr(full_date_string) + "\". Attempting to use the Original Response Date field instead."
 			deadline_date = None
 			bad_date = True
+		
+		#try getting the original deadline instead
 		if(bad_date):
 			date_xpath = "//div[@id='dnf_class_values_procurement_notice__original_response_deadline__widget']/text()"
-			full_date_string = response.xpath(date_xpath)[0].extract()
-			proper_date_string_matches = response.xpath(date_xpath)[0].re(date_pattern)
-			#if(len(proper_date_string_matches) != 1 ):
-				#raise RuntimeError("fbo_scraper: encountered unknown Deadline Date format. Got: " + repr(full_date_string))
+			if(len(response.xpath(date_xpath)) == 1):
+				full_date_string = response.xpath(date_xpath)[0].extract()
+				proper_date_string_matches = response.xpath(date_xpath)[0].re(date_pattern)
 		
 		if(len(proper_date_string_matches) > 0):
 			first_match = str(proper_date_string_matches[0].strip())
 			try:
-				#try 3-letter month
+				# try 3-letter month
 				deadline_date = time.strptime(first_match, "%b %d, %Y")
 			except(ValueError):
-				#try full month name
+				# try full month name
 				deadline_date = time.strptime(first_match, "%B %d, %Y")
 		
 		opp = Opportunity()
 		if(deadline_date):
-			#convert date to string in the [Month (2 char) / Day (2 char) / Year (4 char)] format
-			date_string = time.strftime("%m/%d/%Y",deadline_date)
+			# convert date to string in the [Month (2 char) / Day (2 char) / Year (4 char)] format
+			date_string = time.strftime("%m/%d/%Y", deadline_date)
 		else:
 			date_string = repr(full_date_string)
 		opp["deadline_date"] = date_string
@@ -288,23 +349,22 @@ class FboDarpaSpider(scrapy.Spider):
 		#=================== GET & PROCESS TITLE ==============================#
 		opp_title = response.xpath("//div[@class='agency-header-w']/div/h2/text()")[0].extract()
 		
-		office_wide_pattern = re.compile(r"Office\s*\-?\s*Wide",re.IGNORECASE)
+		office_wide_pattern = re.compile(r"Office\s*\-?\s*Wide", re.IGNORECASE)
 		
-		#check for "Office-Wide" in the title
-		if(len(re.findall(office_wide_pattern, opp_title))>0):
-			if(self.dont_skip_office_wide):
-				check_office_wide = True
-			else:
-				#report
-				print "======= SKIPPING AS OFFICE-WIDE ======"
-				#skip if it has office-wide in the title
-				return
+		# check for "Office-Wide" in the title
+		if(len(re.findall(office_wide_pattern, opp_title)) > 0):
+			check_office_wide = True
+			if(not self.dont_filter_office_wide):
+				# report
+				print "======= FILTERING AS OFFICE-WIDE ======"
+				filtered = True
 				
 				
 		opp["opportunity_title"] = opp_title
 		
 		#================== THE EASY STUFF (sponsor num, announcement type, url)
-		sponsor_number = str(response.xpath("//div[@id='dnf_class_values_procurement_notice__solicitation_number__widget']/text()")[0].extract()).strip()
+		
+		
 		opp["sponsor_number"] = sponsor_number
 		
 		opp["announcement_type"] = str(response.xpath("//div[@id='dnf_class_values_procurement_notice__procurement_type__widget']/text()")[0].extract().strip())
@@ -314,37 +374,37 @@ class FboDarpaSpider(scrapy.Spider):
 		opp["synopsis"] = u""
 		full_desc = response.xpath("//div[@id='dnf_class_values_procurement_notice__description__widget']")[0].extract()
 		
-		#some <p> tags have formatting, or perhaps...
-		#some idiot hand-pasted an entry from another website / text document 
-		#and did not remove the formatting, hence the complicated query
-		desc_text_query = ("./body/div/text()|./body/div/p/text()|" #regular text & paragraphs
-						+"./body/div/p/span/text()|./body/div/p/span/span/text()|" #some queer line spacing & kerning 
-						+"/body/div/p/strong/text()|" #some bold text / headers
-						+"./body/div/div/span[@class='added']/text()") #the dates entries were added
+		# some <p> tags have formatting, or perhaps...
+		# some idiot hand-pasted an entry from another website / text document 
+		# and did not remove the formatting, hence the complicated query
+		desc_text_query = ("./body/div/text()|./body/div/p/text()|"  # regular text & paragraphs
+						+ "./body/div/p/span/text()|./body/div/p/span/span/text()|"  # some queer line spacing & kerning 
+						+ "/body/div/p/strong/text()|"  # some bold text / headers
+						+ "./body/div/div/span[@class='added']/text()")  # the dates entries were added
 		sel = Selector(text=full_desc).xpath(desc_text_query).extract()
 		
 		newline = u'\u000D\u000A'
-		if(len(sel) > 100): #crazy formatting! Collapse (don't insert newlines except for dates)
+		if(len(sel) > 100):  # crazy formatting! Collapse (don't insert newlines except for dates)
 			entr_date_pattern = re.compile(r'(?:Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)\s\d\d?,\s\d\d\d\d\s\d\d?:\d\d?\d\s(?:pm|am)')
 			sel = [entry.strip() + newline if entr_date_pattern.match(entry) or entry == u'Added:' else entry for entry in sel]
 		else:
-			#insert newlines for all entries
-			#trim whitespace
+			# insert newlines for all entries
+			# trim whitespace
 			sel = [entry.strip() + newline for entry in sel]
-			#get rid of newline for last entry
-			sel[len(sel)-1] = sel[len(sel)-1].strip()
+			# get rid of newline for last entry
+			sel[len(sel) - 1] = sel[len(sel) - 1].strip()
 				
 		desc_text = u''.join(sel)
-		#convert html special characters to unicode
+		# convert html special characters to unicode
 		try:
 			desc_text = re.sub(r'&([^;]+);', lambda m: unichr(htmlentitydefs.name2codepoint[m.group(1)]), desc_text)
 		except(KeyError):
-			pass #ignore step
+			pass  # ignore step
 		
-		desc_text = desc_text.strip()#remove trailing newlines
+		desc_text = desc_text.strip()  # remove trailing newlines
 		
-		#check for "Office-Wide" in the synopsis
-		if(len(re.findall(office_wide_pattern, desc_text))>0):
+		# check for "Office-Wide" in the synopsis
+		if(len(re.findall(office_wide_pattern, desc_text)) > 0):
 			check_office_wide = True
 		
 		opp["synopsis"] = desc_text
@@ -360,4 +420,5 @@ class FboDarpaSpider(scrapy.Spider):
 		
 		opp["check_date"] = bad_date
 		opp["check_office_wide"] = check_office_wide
+		opp["filtered"] = filtered
 		yield opp
