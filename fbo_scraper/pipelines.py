@@ -23,5 +23,6 @@ class FboScraperExcelPipeline(object):
         return item
 
     def close_spider(self, spider):
+        self.db.generate_weekly_report()
         self.db.save_all()
         

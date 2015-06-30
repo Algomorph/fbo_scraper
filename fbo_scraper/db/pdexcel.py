@@ -8,7 +8,7 @@ import pandas as pd
 from pandas.io.excel import ExcelWriter
 import os
 from fbo_scraper.items import Opportunity
-from datetime import date
+#from datetime import date
 from datetime import datetime
 
 
@@ -22,8 +22,8 @@ class PandasExcelHelper(object):
 
     def __init__(self, db_filename = "fbo_solicitations.xlsx",
                  report_prefix = "report", 
-                 sol_sheet_name = "notices",
-                 filtered_sheet_name = "filtered_notices",
+                 sol_sheet_name = "solicitations",
+                 filtered_sheet_name = "filtered_solicitations",
                  index_column = "sponsor_number"):
         '''
         Constructor
@@ -40,7 +40,11 @@ class PandasExcelHelper(object):
             writer.save()
             writer.close()
         
-        self.report_filename = report_prefix + "_" + date.today()
+        self.report_filename = (report_prefix + "_" 
+                                + str(datetime.today())[:19]
+                                .replace(":","_").replace(" ","[") + "].xlsx")
+        #kept for posterity, in case only the date component is needed and we don't care about overwrites
+        #self.report_filename = report_prefix + "_" + str(date.today())
         self.db_filename = db_filename
         self.sol_sheet_name = sol_sheet_name
         self.filtered_sheet_name = filtered_sheet_name
@@ -48,8 +52,13 @@ class PandasExcelHelper(object):
         self.filtered_df = pd.read_excel(db_filename,filtered_sheet_name, index_col = index_column)
         self.usaved_sol_counter = 0
         self.sol_counter = 0
-        
-    def gen_weekly_report(self):
+    
+    def generate_weekly_report(self):
+        '''
+        Generates a separate excel report, consisting of non-award-type notices
+        that are not yet overdue
+        '''
+        print "\n\n========  Generating report...  ========"
         df = self.sol_df.copy()
         df["dd"] = [datetime.strptime(dt, "%m/%d/%Y") for dt in df["deadline_date"].values]
         today = datetime.today()
@@ -58,9 +67,15 @@ class PandasExcelHelper(object):
         report_df.to_excel(writer,self.sol_sheet_name,merge_cells=False)
         writer.save()
         writer.close()
+        print "========  Report Generated as " + self.report_filename + " ========\n"
         
         
     def add_item(self,item):
+        '''
+        Adds the item to the proper dataframe based on the "filtered" attribute
+        [filtered == True] ==> self.filtered_df
+        [filtered == False] ==> self.sol_df
+        '''
         item = dict(item)
         
         filtered = item["filtered"]
@@ -87,6 +102,11 @@ class PandasExcelHelper(object):
 
         
     def save_all(self):
+        '''
+        Dumps all solicitations in both databases to an excel file,
+        into two separate spreadsheets: one for filtered items, the other
+        for the remaining (relevant) items
+        '''
         print "\n\n========  Saving solicitations...  ========"
         writer = ExcelWriter(self.db_filename)
         self.sol_df.to_excel(writer,self.sol_sheet_name,merge_cells=False)
@@ -96,4 +116,7 @@ class PandasExcelHelper(object):
         print "========  Done saving.  ========\n"
         
     def contains(self,key):
+        '''
+        Checks whether the key is present in either filtered or the unfiltered dataframe
+        '''
         return key in self.sol_df.index or key in self.filtered_df.index
