@@ -343,7 +343,10 @@ class FboDarpaSpider(scrapy.Spider):
 			# convert date to string in the [Month (2 char) / Day (2 char) / Year (4 char)] format
 			date_string = time.strftime("%m/%d/%Y", deadline_date)
 		else:
-			date_string = repr(full_date_string)
+			try:
+				date_string = str(full_date_string.strip())
+			except:
+				date_string = repr(full_date_string.strip())
 		opp["deadline_date"] = date_string
 		
 		#=================== GET & PROCESS TITLE ==============================#

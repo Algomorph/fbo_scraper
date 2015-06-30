@@ -41,8 +41,8 @@ class PandasExcelHelper(object):
         self.db_filename = db_filename
         self.sol_sheet_name = sol_sheet_name
         self.filtered_sheet_name = filtered_sheet_name
-        self.sol_df = pd.read_excel(db_filename,sol_sheet_name)
-        self.filtered_df = pd.read_excel(db_filename,filtered_sheet_name)
+        self.sol_df = pd.read_excel(db_filename,sol_sheet_name, index_col = index_column)
+        self.filtered_df = pd.read_excel(db_filename,filtered_sheet_name, index_col = index_column)
         self.usaved_sol_counter = 0
         self.sol_counter = 0
         
@@ -74,8 +74,8 @@ class PandasExcelHelper(object):
     def save_all(self):
         print "\n\n========  Saving solicitations...  ========"
         writer = ExcelWriter(self.db_filename)
-        self.sol_df.to_excel(writer,self.sol_sheet_name)
-        self.filtered_df.to_excel(writer,self.filtered_sheet_name)
+        self.sol_df.to_excel(writer,self.sol_sheet_name,merge_cells=False)
+        self.filtered_df.to_excel(writer,self.filtered_sheet_name,merge_cells=False)
         writer.save()
         writer.close()
         print "========  Done saving.  ========\n"
