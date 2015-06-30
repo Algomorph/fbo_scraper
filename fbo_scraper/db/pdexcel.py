@@ -41,8 +41,8 @@ class PandasExcelHelper(object):
         self.db_filename = db_filename
         self.sol_sheet_name = sol_sheet_name
         self.filtered_sheet_name = filtered_sheet_name
-        self.sol_df = pd.read_excel(db_filename,sol_sheet_name,index_col=index_column)
-        self.filtered_df = pd.read_excel(db_filename,filtered_sheet_name,index_col=index_column)
+        self.sol_df = pd.read_excel(db_filename,sol_sheet_name)
+        self.filtered_df = pd.read_excel(db_filename,filtered_sheet_name)
         self.usaved_sol_counter = 0
         self.sol_counter = 0
         

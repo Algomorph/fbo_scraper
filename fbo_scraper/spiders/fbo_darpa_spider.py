@@ -4,7 +4,7 @@
 #   License: Apache V2
 #            [That means (basically): feel free to modify, sell, 
 #             whatever, just do not remove the original author's credits/notice 
-#             from this file. For details see LICENSE file.] 
+#             from the files. For details, see LICENSE file.] 
 ################################################################################
 
 import scrapy.http
