@@ -9,17 +9,20 @@
 
 import scrapy.http
 import re
-import time
 import random
 from scrapy.selector import Selector
 import htmlentitydefs
+import time
+import datetime
+from datetime import date, timedelta
 
 from fbo_scraper.items import Opportunity
-from fbo_scraper.db.pdexcel import PandasExcelHelper
+from numpy.f2py.auxfuncs import throw_error
+#from fbo_scraper.db.pdexcel import PandasExcelHelper
 
 class FboDarpaSpider(scrapy.Spider):
 	'''
-	A utility for scraping DARPA notices from the fbo.gov website
+	A utility for scraping DARPA funding solicitations from the fbo.gov website
 	Run from root directory (top-level fbo_scraper folder) like this:
 		scrapy crawl fbo_darpa
 	'''
@@ -56,7 +59,11 @@ class FboDarpaSpider(scrapy.Spider):
 	}
 	
 	
-	def __init__(self, dont_skip_continuous="false", dont_skip_office_wide="false", *args, **kwargs):
+	def __init__(self, 
+				dont_skip_continuous="false", 
+				dont_skip_office_wide="false", 
+				date_range="last_week",
+				*args, **kwargs):
 		'''
 		Constructor
 		@param dont_filter_continous whether or not to skip notices with continuous 
@@ -65,7 +72,14 @@ class FboDarpaSpider(scrapy.Spider):
 		@param dont_filter_office_wide whether or not to skip notices with "Office-Wide"
 									 (or some form thereof) in the title. Set to
 									 "true" or "false".
+		@type dont_filter_office_wide String
+		@param date_range can be <from date>-<through date>, with dates in the format
+				<month (2 numbers)> / <day (2 numbers)> / <year (4 numbers)>,
+				or just <month/day> for current year,
+				also may be one of "last_week", "this_week" or "all". 
+				IMPLEMENTATION PENDING: CURRENTLY HAS NO EFFECT!
 		'''
+		
 		self.data_params_determined = False
 		
 		if(dont_skip_continuous in ["true", "yes", "y", "Y"]):
@@ -85,9 +99,61 @@ class FboDarpaSpider(scrapy.Spider):
 		# seed the random generator
 		random.seed()
 		
-		# preload the existing notices, so that we may avoid scraping them
-		#self.db = PandasExcelHelper()
+		#TODO: use the posted date range to limit the fbo query
+		self.parse_date_range(date_range)
+
 		super(FboDarpaSpider, self).__init__(*args, **kwargs)
+		
+	def parse_date_range(self,date_range_str):
+		'''
+		called to parse the passed-in date range string into the self.from_date and self.to_date
+		'''
+		if(date_range_str == "last_week" or date_range_str == "this_week"):
+			#this week or last week
+			today = date.today()
+			#this returns 0 if today is Monday, 6 if today is Sunday
+			weekday = today.weekday()
+			time_diff = timedelta(days=weekday)
+			monday = today - time_diff
+			time_diff = timedelta(days=7-weekday)
+			sunday = today + time_diff
+			
+			#for last week, shift back 7 days
+			if(date_range_str == "last_week"):
+				time_diff = timedelta(days=7)
+				monday = monday - time_diff
+				sunday = sunday - time_diff
+			
+			self.from_date = monday
+			self.to_date = sunday
+		elif(date_range_str == "all"):
+			#from beginning of time (1969 for programmers) till the end of time
+			self.from_date = date.fromtimestamp(0)
+			#Year 3000 might not be the end of time, but I hope this script will be deprecated by then
+			self.to_date = date(3000,1,1)
+		else:
+			#explicit date range
+			date_range_pattern = re.compile(r"(\d?\d)\/(\d?\d)(?:\/(\d?\d?\d\d))?")
+			matches = re.findall(date_range_pattern,date_range_str)
+			if(len(matches) != 2):
+				raise ValueError("date_range can be <from date>-<through date>, with dates in the format" +
+				"<month (1-2 numbers)> / <day (1-2 numbers)> / <year (2/4 numbers)>,"+
+				" or just <month/day> for current year" +
+				"also may be one of \"last_week\", \"this_week\" or \"all\".\n Got: " + date_range_str)
+			today = date.today()
+			
+			self.from_date = date(month=int(matches[0][0]),
+								day=int(matches[0][1]),
+								#fix if missing year
+								year=(today.year if matches[0][2] == "" else int(matches[0][2])))
+			self.to_date = date(month=int(matches[1][0]),
+								day=int(matches[1][1]),
+								#fix if missing year
+								year=(today.year if matches[1][2] == "" else int(matches[0][2])))
+			if(self.from_date < self.to_date):
+				raise ValueError("The date_range invalid: end date (" + str(self.from_date) 
+								+ ") precedes start date (" + str(self.to_date) + ").")
+				
 	
 	def start_requests(self):
 		'''	
@@ -229,7 +295,7 @@ class FboDarpaSpider(scrapy.Spider):
 		for request in requests:
 			yield request
 	
-	def construct_fbo_notice_request(self, url, callback):
+	def construct_fbo_solicitation_request(self, url, callback):
 		'''
 		build and return a single query for a single FBO notice
 		@param url The get url to build around (containing the notice's unique identifier internal to fbo.gov)
@@ -280,18 +346,23 @@ class FboDarpaSpider(scrapy.Spider):
 				#report
 				print "======= SKIPPING " + solns[sol_ix] + " (already in database) ====== "
 
-		requests = [self.construct_fbo_notice_request(url, self.parse_fbo_solicitation) 
+		requests = [self.construct_fbo_solicitation_request(url, self.parse_fbo_solicitation) 
 				for url in filtered_notice_urls]
 		for request in requests:
 			yield request
 
 	def parse_fbo_solicitation(self, response):
 		'''
-		parse the FBO notice itself
+		parse the FBO solicitation/notice itself
 		@param response The response object containing the page with the notice.
 		@type Response scrapy.http.Response
 		'''
-		sponsor_number = str(response.xpath("//div[@id='dnf_class_values_procurement_notice__solicitation_number__widget']/text()")[0].extract()).strip()
+		try:
+			sponsor_number = str(response.xpath("//div[@id='dnf_class_values_procurement_notice__solicitation_number__widget']/text()")[0].extract()).strip()
+		except IndexError:
+			print "======= NO SOLICITATION NUMBER (BAD DATA)! SKIPPING... ======"
+			return
+		
 		if(self.db.contains(sponsor_number)):
 			# report
 			print "======= SKIPPING (already in database) ======"
@@ -301,7 +372,7 @@ class FboDarpaSpider(scrapy.Spider):
 		bad_date = False
 		check_office_wide = False
 		filtered = False
-		print "\n============== Parsing Single Notice ====================="
+		print "\n============== Parsing Single Solicitation ====================="
 		print "============== From: " + response.url
 		#=================== GET DEADLINE DATE=================================#
 		date_xpath = "//div[@id='dnf_class_values_procurement_notice__response_deadline__widget']/text()"
@@ -366,8 +437,6 @@ class FboDarpaSpider(scrapy.Spider):
 		opp["opportunity_title"] = opp_title
 		
 		#================== THE EASY STUFF (sponsor num, announcement type, url)
-		
-		
 		opp["sponsor_number"] = sponsor_number
 		
 		opp["announcement_type"] = str(response.xpath("//div[@id='dnf_class_values_procurement_notice__procurement_type__widget']/text()")[0].extract().strip())

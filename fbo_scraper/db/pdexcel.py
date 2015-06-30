@@ -8,6 +8,8 @@ import pandas as pd
 from pandas.io.excel import ExcelWriter
 import os
 from fbo_scraper.items import Opportunity
+from datetime import date
+from datetime import datetime
 
 
 class PandasExcelHelper(object):
@@ -18,7 +20,8 @@ class PandasExcelHelper(object):
     #5 items are saved at a time.
     save_interval = 1
 
-    def __init__(self, db_filename = "fbo_solicitations.xlsx", 
+    def __init__(self, db_filename = "fbo_solicitations.xlsx",
+                 report_prefix = "report", 
                  sol_sheet_name = "notices",
                  filtered_sheet_name = "filtered_notices",
                  index_column = "sponsor_number"):
@@ -32,12 +35,12 @@ class PandasExcelHelper(object):
             writer = ExcelWriter(db_filename)
             sol_df = pd.DataFrame(columns = field_names)
             filtered_df = pd.DataFrame(columns = field_names)
-            
             sol_df.to_excel(writer,sol_sheet_name)
             filtered_df.to_excel(writer,filtered_sheet_name)
             writer.save()
             writer.close()
-            
+        
+        self.report_filename = report_prefix + "_" + date.today()
         self.db_filename = db_filename
         self.sol_sheet_name = sol_sheet_name
         self.filtered_sheet_name = filtered_sheet_name
@@ -46,8 +49,20 @@ class PandasExcelHelper(object):
         self.usaved_sol_counter = 0
         self.sol_counter = 0
         
+    def gen_weekly_report(self):
+        df = self.sol_df.copy()
+        df["dd"] = [datetime.strptime(dt, "%m/%d/%Y") for dt in df["deadline_date"].values]
+        today = datetime.today()
+        report_df = self.sol_df[(df["dd"] >= today) & (df["announcement_type"] != "Award")]
+        writer = ExcelWriter(self.report_filename)
+        report_df.to_excel(writer,self.sol_sheet_name,merge_cells=False)
+        writer.save()
+        writer.close()
+        
+        
     def add_item(self,item):
         item = dict(item)
+        
         filtered = item["filtered"]
         key = item["sponsor_number"]
         item_body = {}

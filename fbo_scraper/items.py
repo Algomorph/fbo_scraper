@@ -16,8 +16,9 @@ class Opportunity(scrapy.Item):
     synopsis = scrapy.Field()
     program_url = scrapy.Field()
     office = scrapy.Field(serializer=str)
-    deadline_date = scrapy.Field(serializer=str)
+    deadline_date = scrapy.Field()
     check_date = scrapy.Field(serializer=bool)
     check_office = scrapy.Field(serializer=bool)
     check_office_wide = scrapy.Field(serializer=bool)
     filtered = scrapy.Field(serializer=bool)
+    

@@ -2,6 +2,24 @@
 Scrapy shell command for expath testing:
 scrapy shell "opportunites_list_example.html"
 
+Problematic solicitations:
+
+1)
+	https://www.fbo.gov/index?s=opportunity&mode=form&id=cf303f2771e9ad7e596b2c23d7eeb402&tab=core&_cview=1
+		  
+		  File "S:\Users\Gregory\Factory\fbo_scraper\fbo_scraper\spiders\fbo_darpa_spider.py", line 357, in parse_fbo_solicitation
+            sponsor_number = str(response.xpath("//div[@id='dnf_class_values_procurement_notice__solicitation_number__widget']/text()")[0].extract()).strip()
+	
+	Problem Found: Does not have sponsor_number
+
+2)
+	https://www.fbo.gov/index?s=opportunity&mode=form&id=694c6c8e6e02263d5275b3c9485e317f&tab=core&_cview=1
+	Problem Found: Same as (1)
+	
+3)	https://www.fbo.gov/index?s=opportunity&mode=form&id=3af89489f89c755599d999378520cf06&tab=core&_cview=1
+	Problem Found: Same as (1)
+
+
 
 >>>>>>>>>>>>>>>>>>>>>>>   HTML STUFF FROM DARPA PAGE   >>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>
 
@@ -17,11 +35,6 @@ DCA:
 >>>>>>>>>>>>>>>>>>>>>>>>    REQUEST FORM DATA & HEADERS   >>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>
 
 *************Request for Darpa***********************
-Cookie Header
-Cookie:PHPSESSID=afc86c5b44420d9aaceeb20fca81f30d; _ga=GA1.3.389169649.1433256956; _gat_GSA_ENOR0=1; BALANCEID=balancer.172.16.1.115; sympcsm_cookies_enabled=1
-
-Query String:
-https://www.fbo.gov/index?s=opportunity&mode=list&tab=list
 
 ===========Request Parameters============================
 
@@ -68,6 +81,3 @@ dnf_class_values[procurement_notice][procurement_type][]:
 dnf_class_values[procurement_notice][set_aside][]:
 mode:list
 
-
-Scrapy reqs:
-vcvarsall.bat
