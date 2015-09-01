@@ -16,7 +16,7 @@ SPIDER_MODULES = ['fbo_scraper.spiders']
 ITEM_PIPELINES = {'fbo_scraper.pipelines.FboScraperExcelPipeline':0}
 NEWSPIDER_MODULE = 'fbo_scraper.spiders'
 
-ROBOTSTXT_OBEY = True
+ROBOTSTXT_OBEY = False
 RANDOMIZE_DOWNLOAD_DELAY = True
 DOWNLOAD_DELAY = 5.0
 
