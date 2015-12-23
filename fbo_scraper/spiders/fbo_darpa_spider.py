@@ -376,6 +376,7 @@ class FboDarpaSpider(scrapy.Spider):
 		print "============== From: " + response.url
 		#=================== GET DEADLINE DATE=================================#
 		date_xpath = "//div[@id='dnf_class_values_procurement_notice__response_deadline__widget']/text()"
+		xpath_results = response.xpath(date_xpath)
 		full_date_string = response.xpath(date_xpath)[0].extract()
 		
 		date_pattern = r"(?:Jan|January|Feb|February|Mar|March|Apr|April|May|Jun|June|Jul|July|Aug|August|Sep|September|Oct|October|Nov|November|Dec|December)\s\d\d?,\s\d\d\d\d"

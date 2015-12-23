@@ -20,11 +20,13 @@ class PandasExcelHelper(object):
     #5 items are saved at a time.
     save_interval = 1
 
+
     def __init__(self, db_filename = "fbo_solicitations.xlsx",
                  report_prefix = "report", 
                  sol_sheet_name = "solicitations",
                  filtered_sheet_name = "filtered_solicitations",
-                 index_column = "sponsor_number"):
+                 index_column = "sponsor_number",
+                 report_only_new = True):
         '''
         Constructor
         '''
@@ -52,21 +54,28 @@ class PandasExcelHelper(object):
         self.filtered_df = pd.read_excel(db_filename,filtered_sheet_name, index_col = index_column)
         self.usaved_sol_counter = 0
         self.sol_counter = 0
+        self.added_items = set()
+        
     
-    def generate_weekly_report(self):
+    def generate_report(self):
         '''
         Generates a separate excel report, consisting of non-award-type notices
         that are not yet overdue
         '''
         print "\n\n========  Generating report...  ========"
+        today = datetime.today()
         df = self.sol_df.copy()
         df["dd"] = [datetime.strptime(dt, "%m/%d/%Y") for dt in df["deadline_date"].values]
-        today = datetime.today()
-        report_df = self.sol_df[(df["dd"] >= today) & (df["announcement_type"] != "Award")]
+        report_df = self.sol_df[(df["dd"] >= today) | (df["check_date"] == 1) 
+                                & (df["announcement_type"] != "Award")]
+        report_df["new"] = pd.Series([(1 if ix in self.added_items else 0 ) 
+                                      for ix in report_df.index ],
+                                      index=report_df.index)
         writer = ExcelWriter(self.report_filename)
         report_df.to_excel(writer,self.sol_sheet_name,merge_cells=False)
         writer.save()
         writer.close()
+        
         print "========  Report Generated as " + self.report_filename + " ========\n"
         
         
@@ -92,6 +101,7 @@ class PandasExcelHelper(object):
         if(filtered):
             self.filtered_df.loc[key] = item_series
         else:
+            self.added_items.add(key)
             self.sol_df.loc[key] = item_series
             
         if(self.sol_counter < PandasExcelHelper.save_interval):
