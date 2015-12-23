@@ -15,6 +15,7 @@ import htmlentitydefs
 import time
 import datetime
 from datetime import date, timedelta
+from scrapy.utils.response import open_in_browser
 
 from fbo_scraper.items import Opportunity
 from numpy.f2py.auxfuncs import throw_error
@@ -376,7 +377,10 @@ class FboDarpaSpider(scrapy.Spider):
 		print "============== From: " + response.url
 		#=================== GET DEADLINE DATE=================================#
 		date_xpath = "//div[@id='dnf_class_values_procurement_notice__response_deadline__widget']/text()"
-		xpath_results = response.xpath(date_xpath)
+		xpath_result = response.xpath(date_xpath)
+		if(len(xpath_result) == 0):
+			#archive date only
+			date_xpath = "//div[@id='so_formfield_dnf_class_values_procurement_notice_archive__response_deadline_']/div[2]/text()"
 		full_date_string = response.xpath(date_xpath)[0].extract()
 		
 		date_pattern = r"(?:Jan|January|Feb|February|Mar|March|Apr|April|May|Jun|June|Jul|July|Aug|August|Sep|September|Oct|October|Nov|November|Dec|December)\s\d\d?,\s\d\d\d\d"
@@ -397,6 +401,7 @@ class FboDarpaSpider(scrapy.Spider):
 		#try getting the original deadline instead
 		if(bad_date):
 			date_xpath = "//div[@id='dnf_class_values_procurement_notice__original_response_deadline__widget']/text()"
+			
 			if(len(response.xpath(date_xpath)) == 1):
 				full_date_string = response.xpath(date_xpath)[0].extract()
 				proper_date_string_matches = response.xpath(date_xpath)[0].re(date_pattern)
