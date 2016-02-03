@@ -65,12 +65,13 @@ class PandasExcelHelper(object):
         print "\n\n========  Generating report...  ========"
         today = datetime.today()
         df = self.sol_df.copy()
+        df["new"] = pd.Series([(1 if ix in self.added_items else 0 ) 
+                                      for ix in df.index ],
+                                      index=df.index)
         df["dd"] = [datetime.strptime(dt, "%m/%d/%Y") for dt in df["deadline_date"].values]
-        report_df = self.sol_df[(df["dd"] >= today) | (df["check_date"] == 1) 
+        report_df = df[(df["dd"] >= today) 
                                 & (df["announcement_type"] != "Award")]
-        report_df["new"] = pd.Series([(1 if ix in self.added_items else 0 ) 
-                                      for ix in report_df.index ],
-                                      index=report_df.index)
+        
         writer = ExcelWriter(self.report_filename)
         report_df.to_excel(writer,self.sol_sheet_name,merge_cells=False)
         writer.save()

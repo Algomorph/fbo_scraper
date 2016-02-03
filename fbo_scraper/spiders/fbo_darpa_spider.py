@@ -1,7 +1,7 @@
 ################################################################################
-#    Author: Greg Kramida (github id: Algomorph)
-# Copyright: (2015) Gregory Kramida
-#   License: Apache V2
+#    @author: Greg Kramida (github id: Algomorph)
+# @copyright: (2015-2016) Gregory Kramida
+#   @license: Apache V2
 #            [That means (basically): feel free to modify, sell, 
 #             whatever, just do not remove the original author's credits/notice 
 #             from the files. For details, see LICENSE file.] 
